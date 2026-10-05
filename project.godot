@@ -1,28 +1,38 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
 config_version=5
 
 [application]
+
 config/name="FRAME / Field Lab"
 run/main_scene="res://main.tscn"
-run/flush_stdout_on_print=true
 config/features=PackedStringArray("4.7", "Mobile")
+run/flush_stdout_on_print=true
 
 [display]
+
 window/size/viewport_width=1280
 window/size/viewport_height=800
 
+[physics]
+
+common/physics_ticks_per_second=90
+
 [rendering]
+
 renderer/rendering_method="mobile"
-renderer/rendering_method.mobile="mobile"
-textures/default_filters/use_nearest_mipmap_filter=false
 anti_aliasing/quality/msaa_3d=1
 environment/defaults/default_clear_color=Color(0.025, 0.035, 0.06, 1)
 
-[physics]
-common/physics_ticks_per_second=90
-
 [xr]
+
 openxr/enabled=true
-openxr/startup_alert=false
-openxr/default_action_map="res://openxr_action_map.tres"
 openxr/reference_space=1
+openxr/startup_alert=false
 shaders/enabled=true
