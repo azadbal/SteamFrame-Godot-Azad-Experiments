@@ -18,7 +18,7 @@ This is a stationary room-scale scene using tracked controllers; it does not req
 
 Installed editor: `C:\Users\Azad\Documents\_apps\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`. A **Godot 4.7.2** Start Menu shortcut is installed.
 
-Import/open `C:\Dev\VR\Steam_frame\godot-openxr-demo\project.godot` in Godot. `main.tscn` contains the XR rig and principal scene nodes; `scripts/lab.gd` constructs the tabletop scene and audio. `scripts/interactions.gd` handles grabs and the switch; `scripts/grabbable.gd` handles throwing and floating objects. Controller bindings are in `openxr_action_map.tres` (Frame and Oculus Touch profiles).
+Import/open `C:\Dev\VR\Steam_frame\godot-openxr-demo\project.godot` in Godot. `main.tscn` contains the XR rig and principal scene nodes; `scripts/lab.gd` constructs the tabletop scene and audio. `scripts/interactions.gd` handles grabs and the switch; `scripts/grabbable.gd` handles throwing and floating objects. The app uses Godot's default OpenXR action map, matching the working XR template. Keep `config/name` free of slashes because SteamVR uses it in generated controller-binding paths.
 
 For a local mouse preview, run in PowerShell:
 
@@ -72,7 +72,7 @@ python tools\deploy.py --launch
 
 Build imports the project, runs interaction regression tests, and exports `build/frame-lab.arm64` plus `build/frame-lab.pck`. Quit the previous headset instance before deploying. Deployment prompts for the SSH password, or reads `FRAME_SSH_PASSWORD` from the process environment; no password is stored in the project. It reuses the workspace's existing Paramiko installation and trusted SSH host entry for `steamos@frame`.
 
-The installer verifies uploaded hashes, installs under `~/devkit-game/Frame_Lab`, registers the existing Steam devkit helper with the installed `SteamLinuxRuntime_4-arm64`, and launches through Steam. Runtime log: `~/.local/state/frame-lab/godot.log`.
+The installer verifies uploaded hashes, installs under `~/devkit-game/Frame_Lab`, registers the existing Steam devkit helper with the installed `SteamLinuxRuntime_4-arm64`, and launches through Steam. `vrpreferences.json` suggests a 90 Hz per-app minimum refresh rate. SteamVR reads it at startup; if an app-specific override is already set, reset that app's video settings to defaults or choose 90 Hz there. Runtime log: `~/.local/state/frame-lab/godot.log`.
 
 To reinstall the pinned editor/templates, run `python tools/setup_godot.py`. Downloads are verified against the official SHA-512 sums. Linux ARM64 and Windows x64 templates are installed; the configured and device-tested export is Linux ARM64. PC VR deployment has not been tested.
 

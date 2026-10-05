@@ -12,3 +12,4 @@ if (-not $SkipTests) {
 New-Item -ItemType Directory -Force (Join-Path $projectDir 'build') | Out-Null
 & $godot --headless --xr-mode off --path $projectDir --export-release 'Steam Frame ARM64' (Join-Path $projectDir 'build\frame-lab.arm64')
 if ($LASTEXITCODE -ne 0) { throw 'Godot export failed.' }
+Copy-Item -LiteralPath (Join-Path $projectDir 'vrpreferences.json') -Destination (Join-Path $projectDir 'build\vrpreferences.json')

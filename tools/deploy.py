@@ -33,7 +33,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--launch", action="store_true")
     args = parser.parse_args()
-    files = [PROJECT / "build" / name for name in ("frame-lab.arm64", "frame-lab.pck")]
+    files = [PROJECT / "build" / name for name in ("frame-lab.arm64", "frame-lab.pck", "vrpreferences.json")]
     files.append(PROJECT / "tools" / "launch.sh")
     for path in files:
         if not path.is_file():

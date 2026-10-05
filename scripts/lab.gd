@@ -42,7 +42,7 @@ func _ready() -> void:
 	get_viewport().physics_object_picking = false
 	_start_audio()
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-	xr.session_begun.connect(func(): print("[FieldLab] session begun"))
+	xr.session_begun.connect(_on_session_begun)
 	xr.session_focussed.connect(func(): _focus(true))
 	xr.session_visible.connect(func(): _focus(false))
 	xr.session_synchronized.connect(func(): _focus(false))
@@ -51,6 +51,10 @@ func _ready() -> void:
 	xr.instance_exiting.connect(func(): get_tree().quit())
 	_focus(xr.get_session_state() == OpenXRInterface.SESSION_STATE_FOCUSED)
 	print("[FieldLab] OpenXR initialized; renderer=%s; physics=90Hz; reference=stage; session=%s" % [RenderingServer.get_current_rendering_method(), xr.get_session_state()])
+
+func _on_session_begun() -> void:
+	var rates: Array = xr.get_available_display_refresh_rates()
+	print("[FieldLab] session begun; display rate=%sHz; available=%s" % [xr.get_display_refresh_rate(), rates])
 
 func _focus(value: bool) -> void:
 	interactions.set_focused(value)
