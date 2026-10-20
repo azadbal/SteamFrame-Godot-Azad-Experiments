@@ -38,7 +38,7 @@ Drag cubes with the left mouse button; hover over the switch to touch it. Normal
 
 ## Develop on Steam Frame and sync with Windows
 
-Both checkouts use [Godot-Sf-1](https://github.com/azadbal/Godot-Sf-1), branch `main`:
+Both checkouts use [SteamFrame-Godot-Azad-Experiments](https://github.com/azadbal/SteamFrame-Godot-Azad-Experiments) (formerly `Godot-Sf-1`; the old URL redirects), branch `main`:
 
 - Windows: `C:\Dev\VR\Steam_frame\godot-openxr-demo`
 - Frame: `/home/steamos/Desktop/Dev/Godot-Sf-1`
@@ -89,6 +89,10 @@ SteamVR/OpenXR 2.18.2 on the Frame (checked 16 October 2026 with `--verbose`) of
 **Debug: panel position.** With project setting `frame_lab/debug/panel_position_save=true` (currently off), the options panel has a **Save position** button at the top right. It stores the panel's pose relative to the launch direction for the current level (`hub`, `eye_tracking_cubes`, `cube_lab`) in `user://panel_positions.json` and prints it as `[Panel] saved ...`. While the setting is on, a saved pose replaces the level's default. `yaw_deg` is positive to the right; `distance_m` is horizontal; `drop_m` is below eye height. On the Frame the file is `~/.local/share/godot/app_userdata/Azad's Steam Frame Experiments/panel_positions.json`.
 
 Headless check (no headset): `Godot --headless --xr-mode off --path . --script res://tests/smoke_levels.gd`. It loads the hub and experiment levels for a few frames and unit-tests the gaze math. It cannot exercise the XR extensions.
+
+## Release download
+
+`python tools/package_release.py v0.1.0` (after `tools/build.ps1`) writes `build/azads-steam-frame-experiments-v0.1.0-linux-arm64.tar.gz` for a GitHub release. It contains the Linux ARM64 executable `frame-lab.arm64`, its data `frame-lab.pck`, `launch.sh` (sets `XR_RUNTIME_JSON` to SteamVR's ARM64 runtime and the log path), `vrpreferences.json` and `INSTALL.txt`. On the Frame: download it in Desktop Mode, extract, then in Steam use **Add a Non-Steam Game** and pick `launch.sh`. The archive was checked on the Frame on 19 October 2026: it extracts with executable permissions and the extracted build passes the self-test. Launching it through **Add a Non-Steam Game** has not been tried yet; the devkit deployment below registers the same files with the `SteamLinuxRuntime_4-arm64` compatibility tool.
 
 ## Build and deploy
 
