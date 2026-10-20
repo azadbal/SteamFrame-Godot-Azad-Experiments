@@ -58,8 +58,11 @@ func release(safe := false) -> void:
 	angular_velocity = angular.limit_length(20.0)
 	samples.clear()
 
+const FLOOR_RESET_HEIGHT := 0.08 # a thrown cube resting on the floor sits about 5 cm up
+
 func reset_if_outside() -> bool:
-	if held_by != -1 or (global_position.y >= -0.5 and global_position.distance_to(home.origin) < 3.0):
+	var on_floor := not floating and global_position.y < FLOOR_RESET_HEIGHT
+	if held_by != -1 or (not on_floor and global_position.y >= -0.5 and global_position.distance_to(home.origin) < 3.0):
 		return false
 	global_transform = home
 	linear_velocity = Vector3.ZERO

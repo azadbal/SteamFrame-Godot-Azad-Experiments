@@ -50,6 +50,9 @@ static func run(lab: Node3D) -> void:
 	check(cube.held_by == -1, "focus return requires fresh squeeze", failures)
 	cube.global_position = Vector3(0, -2, 0)
 	check(cube.reset_if_outside() and cube.global_transform == cube.home, "fallen cube resets", failures)
+	cube.global_position = cube.home.origin + Vector3(0.4, 0, 0)
+	cube.global_position.y = 0.05
+	check(cube.reset_if_outside() and cube.global_transform == cube.home, "cube on the floor returns to the table", failures)
 	# Exercise the real XRController3D input boundary with trigger-only input.
 	var tracker := XRControllerTracker.new()
 	tracker.type = XRServer.TRACKER_CONTROLLER

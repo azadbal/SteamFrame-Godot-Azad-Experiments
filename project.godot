@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="Frame Lab"
-run/main_scene="res://main.tscn"
+config/name="Azad's Steam Frame Experiments"
+run/main_scene="res://levels/hub.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 run/flush_stdout_on_print=true
 
@@ -19,6 +19,12 @@ run/flush_stdout_on_print=true
 
 window/size/viewport_width=1280
 window/size/viewport_height=800
+
+[frame_lab]
+
+debug/panel_position_save=false
+debug/show_controller_colliders=false
+debug/text_composition_layer=true
 
 [physics]
 
@@ -36,4 +42,6 @@ openxr/enabled=true
 openxr/reference_space=1
 openxr/foveation_with_subsampled_images=false
 openxr/startup_alert=false
+openxr/extensions/eye_gaze_interaction=true
+openxr/extensions/render_model=true
 shaders/enabled=true

@@ -4,15 +4,26 @@ const CubeScript = preload("res://scripts/grabbable.gd")
 const Tests = preload("res://tests/self_test.gd")
 const COOL := Color("65d7ec")
 const WARM := Color("ffba73")
+const HUB_SCENE := "res://levels/hub.tscn"
+const ToolPanel = preload("res://levels/tool_panel.gd")
+const PulseShader = preload("res://scripts/sound_pulse.gdshader")
+const SOUND_RADIUS := 0.055
+const SWITCH_HALF := Vector3(0.065, 0.0175, 0.065)
+const GRAB_MARGIN := 0.02 # a controller this close to an object's surface can grab it
+const XRSupport = preload("res://levels/xr_support.gd")
 @onready var interactions = $Interactions
 @onready var hands: Array[XRController3D] = [$XROrigin3D/LeftHand, $XROrigin3D/RightHand]
 var xr: OpenXRInterface
 var desktop := false
 var testing := false
 var accent: StandardMaterial3D
-var state_label: Label3D
+var switch_cap: MeshInstance3D
+var mood_text := "Cool"
 var status_time := 0.0
 var desktop_distance := 2.0
+var panel
+var floor_nodes: Array = []
+var recenter_in := -1.0
 
 func _ready() -> void:
 	testing = "--self-test" in OS.get_cmdline_user_args()
@@ -49,8 +60,33 @@ func _ready() -> void:
 	xr.session_stopping.connect(_stop_session)
 	xr.session_loss_pending.connect(_stop_session)
 	xr.instance_exiting.connect(func(): get_tree().quit())
+	xr.pose_recentered.connect(_on_pose_recentered)
+	interactions.reach_test = _hand_reaches
+	panel = ToolPanel.new()
+	panel.setup(hands, $XROrigin3D/XRCamera3D)
+	add_child(panel)
+	panel.add_button(&"back", "Return to hub", &"right")
+	panel.add_button(&"passthrough", "", &"right")
+	panel.pressed.connect(_on_panel_pressed)
+	_update_panel_info()
+	_refresh_passthrough()
 	_focus(xr.get_session_state() == OpenXRInterface.SESSION_STATE_FOCUSED)
 	print("[FieldLab] OpenXR initialized; renderer=%s; physics=90Hz; reference=stage; session=%s" % [RenderingServer.get_current_rendering_method(), xr.get_session_state()])
+
+func _on_pose_recentered() -> void:
+	# The new reference space applies from the next frames; re-place the panel shortly after.
+	recenter_in = 0.25
+
+func _on_panel_pressed(id: StringName) -> void:
+	if id == &"back":
+		get_tree().change_scene_to_file.call_deferred(HUB_SCENE)
+	elif id == &"passthrough":
+		XRSupport.set_passthrough(not XRSupport.passthrough_on())
+		_refresh_passthrough()
+
+func _refresh_passthrough() -> void:
+	XRSupport.apply_passthrough(get_viewport(), $WorldEnvironment.environment, Color("101923"), floor_nodes)
+	panel.set_button_text(&"passthrough", XRSupport.passthrough_label())
 
 func _on_session_begun() -> void:
 	var rates: Array = xr.get_available_display_refresh_rates()
@@ -62,6 +98,7 @@ func _focus(value: bool) -> void:
 		var audio := cube.get_node_or_null("Tone") as AudioStreamPlayer3D
 		if audio != null:
 			audio.stream_paused = not value
+			cube.get_node("Pulse").visible = value
 	print("[FieldLab] focus=%s; held objects released on loss" % value)
 
 func _stop_session() -> void:
@@ -113,11 +150,23 @@ func _physics_process(delta: float) -> void:
 			var hand := hands[index]
 			var tracked := hand.get_is_active() and hand.get_has_tracking_data()
 			hand.visible = tracked
-			var grip := _grab_strength(hand) if tracked else 0.0
+			# A hand pressing a panel button or carrying the panel must not grab cubes.
+			var grip := _grab_strength(hand) if tracked and not panel.uses_hand(index) else 0.0
 			interactions.update_hand(index, tracked, hand.global_transform, grip, delta)
-			if tracked:
-				touches.append(hand.global_position)
+			# The switch counts as touched when the controller's collider overlaps its cap.
+			if tracked and XRSupport.hand_touches_box(self, index, switch_cap.global_transform, SWITCH_HALF, 0.005):
+				touches.append(interactions.button_position)
+		var camera: XRCamera3D = $XROrigin3D/XRCamera3D
+		if not panel.placed and interactions.focused and camera.global_position.y > 0.3:
+			panel.place_default()
+		if recenter_in >= 0.0:
+			recenter_in -= delta
+			if recenter_in < 0.0 and camera.global_position.y > 0.3:
+				XRSupport.capture_home(camera)
+				panel.place_default()
 	interactions.update_touch(touches)
+	# The switch cap sinks while touched.
+	switch_cap.position.y = move_toward(switch_cap.position.y, -0.02 if interactions.touching else 0.0, delta * 0.25)
 	for cube in interactions.cubes:
 		if cube.reset_if_outside():
 			print("[FieldLab] reset %s" % cube.name)
@@ -125,6 +174,18 @@ func _physics_process(delta: float) -> void:
 	if status_time >= 10.0:
 		status_time = 0.0
 		print("[FieldLab] status mode=%s focus=%s tracked=%s/%s held=%s/%s fps=%d" % ["desktop" if desktop else "OpenXR", interactions.focused, hands[0].get_is_active(), hands[1].get_is_active(), interactions.held[0] != null, interactions.held[1] != null, Engine.get_frames_per_second()])
+
+# A controller can grab an object when its collider is within GRAB_MARGIN of the object's surface.
+func _hand_reaches(hand: int, cube: Node3D) -> bool:
+	var shape: Shape3D = (cube.get_node("Collider") as CollisionShape3D).shape
+	var grown: Shape3D
+	if shape is SphereShape3D:
+		grown = SphereShape3D.new()
+		grown.radius = shape.radius + GRAB_MARGIN
+	else:
+		grown = BoxShape3D.new()
+		grown.size = (shape as BoxShape3D).size + Vector3.ONE * GRAB_MARGIN * 2.0
+	return XRSupport.hand_touches_shape(self, hand, grown, cube.global_transform)
 
 func _grab_strength(hand: XRController3D) -> float:
 	var strength := maxf(hand.get_float("grip"), hand.get_float("trigger"))
@@ -141,10 +202,24 @@ func _set_mood(warm: bool) -> void:
 	accent.albedo_color = color
 	accent.emission = color
 	$KeyLight.light_color = Color("ffe0b5") if warm else Color("b5dfff")
-	state_label.text = "AMBER / WARM" if warm else "CYAN / COOL"
-	state_label.modulate = color
+	mood_text = "Warm (amber)" if warm else "Cool (cyan)"
+	_update_panel_info()
 	if is_node_ready():
-		print("[FieldLab] touch state=%s" % state_label.text)
+		print("[FieldLab] touch state=%s" % mood_text)
+
+func _update_panel_info() -> void:
+	if panel == null:
+		return
+	var info: Array[String] = [
+		"# How to play",
+		"- Grab (trigger) the sound-emitting spheres and place them around you to hear spatial audio.",
+		"- Grab (trigger) the cubes and throw them around to test grabbing and throwing.",
+		"- Press the switch to change the light.",
+		"# Light",
+		"- " + mood_text,
+		"~ Grip the panel frame to move it.",
+	]
+	panel.set_info("Cube lab", info)
 
 func _material(color: Color, glow := false) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -189,7 +264,6 @@ func _build_room() -> void:
 	accent = _material(COOL, true)
 	var dark := _material(Color("17232f"))
 	var base := _material(Color("334553"))
-	var white := Color("d9e9ed")
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color("101923")
@@ -197,29 +271,25 @@ func _build_room() -> void:
 	environment.ambient_light_color = Color("9ebbcf")
 	environment.ambient_light_energy = 0.65
 	$WorldEnvironment.environment = environment
-	_box($Room, Vector3(8, 0.1, 8), Vector3(0, -0.05, 0), dark, true)
+	floor_nodes.append(_box($Room, Vector3(8, 0.1, 8), Vector3(0, -0.05, 0), dark, true))
 	_box($Room, Vector3(1.35, 0.07, 0.72), Vector3(0, 0.74, -0.65), base, true)
 	_box($Room, Vector3(1.25, 0.018, 0.012), Vector3(0, 0.78, -0.30), accent)
 	for x in [-0.54, 0.54]:
 		_box($Room, Vector3(0.045, 0.70, 0.5), Vector3(x, 0.35, -0.65), base)
 	for x in range(-4, 5):
-		_box($Room, Vector3(0.006, 0.002, 8), Vector3(x, 0.002, 0), base)
-		_box($Room, Vector3(8, 0.002, 0.006), Vector3(0, 0.002, x), base)
-	_box($Room, Vector3(1.72, 0.61, 0.06), Vector3(0, 1.50, -1.40), dark)
-	_label($Room, "FRAME / FIELD LAB", Vector3(0, 1.69, -1.36), 47, white)
-	_label($Room, "01  TRIGGER OR GRIP + THROW   /   02  MOVE THE SOUND", Vector3(0, 1.56, -1.36), 18, white)
-	_label($Room, "03  TOUCH THE LIGHT SWITCH", Vector3(0, 1.49, -1.36), 19, white)
-	state_label = _label($Room, "", Vector3(0, 1.34, -1.36), 27, COOL)
+		floor_nodes.append(_box($Room, Vector3(0.006, 0.002, 8), Vector3(x, 0.002, 0), base))
+		floor_nodes.append(_box($Room, Vector3(8, 0.002, 0.006), Vector3(0, 0.002, x), base))
 	_box($TouchButton, Vector3(0.18, 0.04, 0.18), Vector3(0, -0.04, 0), dark)
-	_box($TouchButton, Vector3(0.13, 0.035, 0.13), Vector3.ZERO, accent)
-	var touch_label := _label($TouchButton, "TOUCH", Vector3(0, 0.023, 0), 19, Color("152432"))
+	switch_cap = _box($TouchButton, Vector3(0.13, 0.035, 0.13), Vector3.ZERO, accent)
+	var touch_label := _label(switch_cap, "PRESS", Vector3(0, 0.023, 0), 19, Color("152432"))
 	touch_label.rotation_degrees.x = -90
 	var colors := [Color("ed826a"), Color("e8c36a"), Color("a99de7")]
 	for index in range(3):
 		_make_cube("ThrowCube%d" % (index + 1), Vector3(-0.33 + index * 0.22, 0.85, -0.54), colors[index], false, 0)
-		_make_cube("SoundCube%d" % (index + 1), Vector3(-0.34 + index * 0.34, 1.12, -0.62), colors[index], true, 180 + index * 90)
+		_make_cube("SoundSphere%d" % (index + 1), Vector3(-0.34 + index * 0.34, 1.12, -0.62), colors[index], true, 180 + index * 90)
 	for index in range(2):
-		_box(hands[index], Vector3(0.055, 0.055, 0.09), Vector3.ZERO, _material(COOL if index == 0 else WARM, true))
+		XRSupport.attach_controller_model(hands[index])
+		XRSupport.attach_controller_collider(hands[index], index)
 		hands[index].visible = false
 
 func _make_cube(title: String, position: Vector3, color: Color, floating: bool, frequency: int) -> void:
@@ -233,12 +303,38 @@ func _make_cube(title: String, position: Vector3, color: Color, floating: bool, 
 	$Cubes.add_child(cube)
 	cube.position = position
 	cube.home = cube.global_transform
-	var size := Vector3.ONE * (0.105 if floating else 0.095)
-	_box(cube, size, Vector3.ZERO, _material(color, floating))
 	var collider := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = size
-	collider.shape = shape
+	collider.name = "Collider"
+	if floating:
+		# Sound sources are spheres with rings pulsing outward while they play.
+		var mesh := MeshInstance3D.new()
+		var sphere := SphereMesh.new()
+		sphere.radius = SOUND_RADIUS
+		sphere.height = SOUND_RADIUS * 2.0
+		mesh.mesh = sphere
+		mesh.material_override = _material(color, true)
+		cube.add_child(mesh)
+		var shape := SphereShape3D.new()
+		shape.radius = SOUND_RADIUS
+		collider.shape = shape
+		var pulse := MeshInstance3D.new()
+		pulse.name = "Pulse"
+		var quad := QuadMesh.new()
+		quad.size = Vector2.ONE * SOUND_RADIUS * 6.0
+		pulse.mesh = quad
+		var pulse_material := ShaderMaterial.new()
+		pulse_material.shader = PulseShader
+		pulse_material.set_shader_parameter("color", color.lightened(0.3))
+		pulse_material.set_shader_parameter("inner", 1.0 / 3.0)
+		pulse_material.set_shader_parameter("speed", 0.35 + frequency / 900.0)
+		pulse.material_override = pulse_material
+		cube.add_child(pulse)
+	else:
+		var size := Vector3.ONE * 0.095
+		_box(cube, size, Vector3.ZERO, _material(color, floating))
+		var shape := BoxShape3D.new()
+		shape.size = size
+		collider.shape = shape
 	cube.add_child(collider)
 	interactions.cubes.append(cube)
 	if floating:

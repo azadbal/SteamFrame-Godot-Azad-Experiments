@@ -10,6 +10,11 @@ var focused := false
 var warm := false
 var touch_latched := false
 var button_position := Vector3.ZERO
+var touching := false
+# Optional (hand: int, cube) -> bool; when set, a hand can only grab objects it touches.
+# Without it (tests, desktop preview) the nearest object within GRAB_RADIUS of the pose is taken.
+var reach_test: Callable
+const GRAB_RADIUS := 0.16
 
 func set_focused(value: bool) -> void:
 	focused = value
@@ -38,9 +43,11 @@ func update_hand(hand: int, tracked: bool, pose: Transform3D, grip: float, delta
 	elif grip > 0.65 and not squeezed[hand]:
 		squeezed[hand] = true
 		var closest = null
-		var distance := 0.16
+		var distance := INF if reach_test.is_valid() else GRAB_RADIUS
 		for cube in cubes:
 			var candidate: float = cube.global_position.distance_to(pose.origin)
+			if reach_test.is_valid() and not reach_test.call(hand, cube):
+				continue
 			if cube.held_by == -1 and candidate < distance:
 				closest = cube
 				distance = candidate
@@ -53,7 +60,7 @@ func update_hand(hand: int, tracked: bool, pose: Transform3D, grip: float, delta
 func update_touch(hand_positions: Array) -> void:
 	if not focused:
 		return
-	var touching := false
+	touching = false
 	for position in hand_positions:
 		# A palm-sized contact volume around the actual button cap.
 		var offset: Vector3 = position - button_position
