@@ -1,123 +1,92 @@
 # Azad's Steam Frame Experiments
 
-Formerly **Frame Lab**. The app name (`config/name`, also the OpenXR application name and the `user://` folder) is "Azad's Steam Frame Experiments"; build files (`frame-lab.arm64`/`.pck`), the devkit entry (`Frame_Lab`) and the log folder (`~/.local/state/frame-lab`) keep the old name.
+Small VR experiments for the Valve Steam Frame, made with Godot 4.7.2 and running natively on the headset (Linux ARM64, OpenXR). There are two levels: **Eye tracking cubes**, where you select with your gaze and run a calibration, and **Cube lab**, with throwable cubes, spatial-audio spheres and a light switch.
 
-Minimal Godot 4.7.2 OpenXR demo, built and tested natively on Steam Frame (Linux ARM64).
+## Try it
 
-## Play
+1. On the Steam Frame, switch to **Desktop Mode** and download the latest `azads-steam-frame-experiments-…-linux-arm64.tar.gz` from [Releases](https://github.com/azadbal/SteamFrame-Godot-Azad-Experiments/releases).
+2. Extract it (Dolphin: right-click → **Extract** → **Extract here**).
+3. Double-click **`install.py`** in the extracted folder and choose **Execute**. A message confirms the install.
+4. Back in the headset, open the Steam library → **Non-Steam** → **Azads_Steam_Frame_Experiments**.
 
-On the headset, open **Steam → Library → Non-Steam → Frame Lab** (the devkit entry may display `Frame_Lab`). It starts in the **hub**: touch a level (Eye tracking cubes, Cube lab) with a controller and pull that controller's trigger.
+You can delete the downloaded folder afterwards. To update, install a newer release the same way. To uninstall, run `python3 install.py --uninstall` in the extracted folder.
 
-Every level has an **options and info panel** to the right of the launch direction. Its poses were placed in the headset: the hub's (63° right, 0.66 m out, 17 cm below eye height) is used in the hub and eye tracking level, and the cube lab has its own (68°, 0.73 m, 11 cm). They live in `DEFAULT_POSES` in `levels/tool_panel.gd`. Its text has a title, section headers and bullets (a `RichTextLabel` rendered into a 640x356 `SubViewport`, about 1.5x the display density at the panel's distance). Sizing it to the display (rather than a much larger texture that gets minified without mipmaps) is what removes most of the aliasing. With project setting `frame_lab/debug/text_composition_layer` on (the default), the text is an OpenXR quad composition layer with a hole punch, so SteamVR's compositor samples it at display resolution. It can trail the scene slightly during fast head turns; turn the setting off to draw the text as an in-scene quad instead. Level options sit bottom-left; **Return to hub** (in the hub, **Quit app**) sits bottom-right with **Passthrough** above it. The hub's panel lists the runtime, eye gaze and foveation support, blend modes, refresh rate and per-eye render resolution. Press a panel button the same way. To move the panel, touch it off the buttons (its frame lights up), squeeze the grip and carry it. Passthrough stays as set when you change level.
+If the installer says Steam did not answer, turn on **Developer Mode** in Steam settings and run it again. The installer has only been tested on a Frame with Developer Mode on.
 
-The forward direction is captured once at launch and kept for every level. Recentre with the headset's system button to capture it again. Each controller's collider is a 4.5 cm sphere around its front tip, 7 cm along the grip pose's −Z (`levels/controller_collider.gd`). Buttons, the panel, the switch and grabbing all use physics overlap queries against it. Grabbing needs the sphere within 2 cm of an object's surface. The sphere is drawn translucent while `frame_lab/debug/show_controller_colliders=true` (currently off). Earlier versions used a capsule and then convex hulls from the controller render model; rescanning the model caused stutter. Controllers are drawn with the runtime's own models (`XR_EXT_render_model`).
+### Controls
 
-**Cube lab** level (the instructions and the light state are on the options panel):
+- **Hub:** touch a level with a controller and pull that controller's trigger.
+- **Options panel** (to your right in every level): press a button the same way. To move the panel, touch its frame, squeeze the grip and carry it. **Passthrough** toggles the camera view. **Return to hub** leaves the level; in the hub this button is **Quit app**.
+- **Eye tracking cubes:** look at a cube and it turns orange, then green. **Calibrate** shows 9 targets: look at each and press the right trigger. The measured offset is then applied to your gaze. Any face button toggles the eye dot.
+- **Cube lab:** grab (trigger) the sound spheres and place them around you to hear spatial audio. Grab and throw the cubes; they return to the table when they hit the floor. Press the switch to change the light.
+- Hold the system button to recentre. Content follows the direction you faced at launch.
 
-- Hold the index-finger trigger **or** side grip near a cube to pick it up. Release to throw.
-- Floating spheres emit different positional tones (shown by pulsing rings) and stay where released.
-- Press the cyan/amber switch with a controller to change the lighting; its cap sinks while pressed. Move both hands away before pressing again.
-- Open Steam's dashboard to pause interaction; quit through Steam. Focus loss releases held objects safely and pauses sounds.
-- Thrown cubes return to the table when they land on the floor, fall below it, or travel more than three metres from their starting position.
+## How the repo works
 
-This is a stationary room-scale scene using tracked controllers; it does not require optical hand tracking.
+```
+levels/            hub, eye tracking level, shared XR code (main scene: levels/hub.tscn)
+  hub.gd             level picker; panel shows runtime info and render resolution
+  base.gd            shared rig for hub + eye tracking: XR origin, controllers, panel, passthrough, input
+  tool_panel.gd      options/info panel: formatted text, buttons, grabbing, per-level default pose
+  xr_support.gd      launch-direction "home" frame, controller collider queries, passthrough, controller models
+  controller_collider.gd   sphere collider at each controller's tip (physics layers 20/21)
+  eye_tracking_cubes.gd    gaze selection + 9-point calibration
+  eye_tracking_source.gd   reads XR_EXT_eye_gaze_interaction, applies the calibration offset
+  eye_tracking_math.gd     angle, bias and jitter math (unit tested)
+  cube_lab.tscn      the cube lab scene; its logic is in scripts/
+scripts/           cube lab: lab.gd (scene + panel), interactions.gd (grab/switch), grabbable.gd (throw/reset), sound_pulse.gdshader
+tests/             self_test.gd (cube lab behaviour), smoke_levels.gd (loads levels, math and panel tests)
+tools/             build.ps1, deploy.py, launch.sh, install.py, package_release.py, setup_godot.py, action-map tools
+openxr_action_map.tres   controller bindings (Frame controller + Touch fallback), eye_pose and face_button actions
+```
 
-## Edit
+**Levels.** The hub and eye tracking level extend `levels/base.gd`, which builds the XR rig, the options panel (with **Passthrough** and **Return to hub**) and the trigger and face-button input. A level overrides `build()`, `on_frame()`, `on_trigger()`, `on_button()` and `on_recentered()`, and adds its own panel buttons with `panel.add_button()`. The cube lab predates this. It is its own scene, but it uses the same panel, collider and passthrough helpers.
 
-Installed editor: `C:\Users\Azad\Documents\_apps\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`. A **Godot 4.7.2** Start Menu shortcut is installed.
+**Placement.** The direction you face when the app starts becomes the "home" frame (stored with `Engine.set_meta`), and every level places content relative to it. A system-button recentre captures it again. The panel's default poses were set in the headset and live in `DEFAULT_POSES` in `tool_panel.gd`.
 
-Import/open `C:\Dev\VR\Steam_frame\godot-openxr-demo\project.godot` in Godot. The main scene is `levels/hub.tscn`; every level lives in `levels/`. `levels/cube_lab.tscn` contains the cube lab's XR rig and principal scene nodes; `scripts/lab.gd` constructs the tabletop scene and audio. `scripts/interactions.gd` handles grabs and the switch; `scripts/grabbable.gd` handles throwing and floating objects. The app uses Godot's default OpenXR action map, matching the working XR template. Keep `config/name` free of slashes because SteamVR uses it in generated controller-binding paths.
+**Panel text.** The text is a `RichTextLabel` drawn into a 640×356 `SubViewport`, about 1.5× the display density at the panel's distance. That viewport is shown as an OpenXR quad composition layer, which the compositor samples at display resolution, with a hole punch so controllers can pass in front of it. `set_info()` takes lines starting with `# ` for headers, `- ` for bullets and `~ ` for muted notes.
 
-For a local mouse preview, run in PowerShell:
+**Controllers.** The runtime draws the controller models (`XR_EXT_render_model`). Touching and grabbing use a 4.5 cm sphere at the controller tip, checked with physics shape queries (`XRSupport.hand_touches_box` / `hand_touches_shape`).
+
+**Eye tracking.** This uses `XR_EXT_eye_gaze_interaction` through an `eye_pose` action. Calibration measures the mean yaw/pitch offset over 9 targets, in head-local terms, and removes it from the gaze. Data goes to `user://eye_calibration.json` and `user://eye_tracking_accuracy.json`. Each calibration overwrites both files, and **Clear calibration** deletes them.
+
+**Passthrough.** This is the runtime's `ALPHA_BLEND` blend mode. Levels clear to alpha 0 and hide their floor while it is on. The mode lives on the OpenXR interface, so it persists across levels.
+
+**What the Frame's runtime supports.** SteamVR/OpenXR 2.18.2 was checked on 16 October 2026 with `--verbose`. It offers eye gaze, hand tracking, foveation, render models and the `OPAQUE` and `ALPHA_BLEND` blend modes. It offers no spatial-entity extensions, so there are no anchors, plane tracking or marker tracking. Apps get no camera frames either; passthrough is composited by the system.
+
+**Project settings** (`[frame_lab]` in `project.godot`):
+
+| Setting | Default | Effect |
+|---|---|---|
+| `debug/text_composition_layer` | on | Panel text as an OpenXR layer. When off, it is drawn as an in-scene quad; the layer can trail the scene slightly in fast head turns. |
+| `debug/show_controller_colliders` | off | Draws the controller tip spheres. |
+| `debug/panel_position_save` | off | Adds a **Save position** button that stores the panel pose to `user://panel_positions.json` and uses saved poses. |
+
+**Names.** The app is called "Azad's Steam Frame Experiments" (`config/name`). That name is also the OpenXR application name and the `user://` folder, `~/.local/share/godot/app_userdata/Azad's Steam Frame Experiments/`. Keep it free of slashes, because SteamVR uses it in controller-binding paths. Build files (`frame-lab.arm64` and `.pck`), the dev devkit entry (`Frame_Lab`) and the log folder (`~/.local/state/frame-lab/`) keep the old name, Frame Lab.
+
+## Develop
+
+**Requirements:** Godot 4.7.2 with Linux ARM64 export templates. `python tools/setup_godot.py` installs pinned, hash-verified copies under the user profile. Deployment also needs a Steam Frame reachable over SSH.
+
+**Edit and test on Windows:**
 
 ```powershell
-& "$env:USERPROFILE\Documents\_apps\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --path 'C:\Dev\VR\Steam_frame\godot-openxr-demo' --xr-mode off -- --desktop
+.\tools\build.ps1                      # import, cube lab self-test, export build/frame-lab.arm64 + .pck
+& "$env:USERPROFILE\Documents\_apps\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --xr-mode off --path . --script res://tests/smoke_levels.gd
+& "$env:USERPROFILE\Documents\_apps\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --path . --xr-mode off -- --desktop   # mouse preview of the cube lab
 ```
 
-Drag cubes with the left mouse button; hover over the switch to touch it. Normal launch requires OpenXR and fails explicitly if no runtime is available.
+**Deploy to the headset (dev entry `Frame_Lab`):** run `python tools\deploy.py --launch`. It uploads with hash checks to `~/devkit-game/Frame_Lab`, registers the build with Steam using the `SteamLinuxRuntime_4-arm64` compatibility tool, and launches it. The script asks for the SSH password or reads `FRAME_SSH_PASSWORD`. Quit the running instance first. Logs go to `~/.local/state/frame-lab/godot.log`. `vrpreferences.json` asks SteamVR for at least 90 Hz.
 
-## Develop on Steam Frame and sync with Windows
+**Release:** run `python tools\package_release.py v0.1.1` after `build.ps1`. It writes `build/azads-steam-frame-experiments-v0.1.1-linux-arm64.tar.gz`, which keeps Unix permissions, with `install.py`, the build, `launch.sh` and `INSTALL.txt`. Attach that file to a GitHub release. `install.py` is self-contained: it copies the app to `~/devkit-game/Azads_Steam_Frame_Experiments` and registers it through `~/.steam/steam.pipe`, the same protocol Valve's devkit tools use. It doesn't need the PC devkit client.
 
-Both checkouts use [SteamFrame-Godot-Azad-Experiments](https://github.com/azadbal/SteamFrame-Godot-Azad-Experiments) (formerly `Godot-Sf-1`; the old URL redirects), branch `main`:
+**Develop on the Frame and sync with Windows:** both checkouts track `main` of [SteamFrame-Godot-Azad-Experiments](https://github.com/azadbal/SteamFrame-Godot-Azad-Experiments), formerly `Godot-Sf-1`; the old URL redirects.
 
-- Windows: `C:\Dev\VR\Steam_frame\godot-openxr-demo`
-- Frame: `/home/steamos/Desktop/Dev/Godot-Sf-1`
+- **Windows:** `C:\Dev\VR\Steam_frame\godot-openxr-demo`
+- **Frame:** `/home/steamos/Desktop/Dev/Godot-Sf-1`. Open **Desktop → Dev → godot → Frame Lab.desktop** to start the native editor with the Frame's OpenXR runtime, press **F5**, then use Steam's **Resume Game**. The Frame pushes with its own repository-only deploy key, `/home/steamos/.ssh/godot_sf_1_ed25519`.
 
-On Frame, open **Desktop → Dev → godot → Frame Lab.desktop**. This launches the native Godot 4.7.2 editor with the Frame OpenXR runtime selected. Press **F5** to run; use Steam's **Resume Game** to enter the running VR scene. Stop it from Godot before running another XR project. The previously installed Steam library build is separate; source edits appear when running from this editor.
+Run `git pull --ff-only` before editing on either device. Commit and push when done, and don't edit the same files on both at once.
 
-In a terminal inside either checkout, pull before editing, then save your work in Godot and publish it:
+**Action map:** `tools/add_eye_gaze_action.gd` and `tools/add_face_button_action.gd` add actions to `openxr_action_map.tres` and can safely be re-run. Run them with `Godot --headless --xr-mode off --path . --script res://tools/<name>.gd`.
 
-```sh
-git pull --ff-only
-# Edit and save in Godot.
-git status
-git add <files-you-changed>
-git commit -m "Describe your change"
-git push
-```
-
-On the other device, save/commit any local work, then `git pull --ff-only` before opening the project. Git sync is manual; avoid editing the same files on both devices at once. If a pull refuses because histories diverged, resolve the changes rather than force-pushing. Godot caches, builds, logs, and export credentials are excluded.
-
-Frame authenticates using its own repository-only SSH deploy key, **Steam Frame Godot-Sf-1 development**, with write access. Its private key stays in `/home/steamos/.ssh/godot_sf_1_ed25519`; Windows credentials are not copied. Revoke this key under the repository's **Settings → Deploy keys** if needed.
-
-To verify directly on Frame:
-
-```sh
-cd /home/steamos/Desktop/Dev/Godot-Sf-1
-godot=/home/steamos/Desktop/Dev/godot/Godot_v4.7.2-stable_linux.arm64
-"$godot" --headless --xr-mode off --editor --import
-"$godot" --headless --xr-mode off -- --self-test
-```
-
-## Hub and levels
-
-`levels/hub.tscn` is the main scene. Its panel shows what the runtime supports (also saved to `user://capability_report.txt`). Any level can also be run directly with **F6** in the editor. Shared pieces: `levels/base.gd` (rig, panel, passthrough floor), `levels/tool_panel.gd` (the options panel), `levels/xr_support.gd` (home direction, controller probe, passthrough, controller models).
-
-| Level | What it does |
-|---|---|
-| `cube_lab` | Throwable cubes, floating sound spheres and the light switch (`scripts/`). |
-| `eye_tracking_cubes` | Look at a cube: it turns orange, then green after 0.8 s. Options: **Calibrate**, **Eye dot** (on by default; any face button also toggles it), **Calibration ON/OFF**, **Clear calibration**. |
-
-**Calibrate** hides the cubes and shows 9 targets at 2 m. Look at each target and press the right trigger. The mean yaw/pitch offset between gaze and targets (head-local) is then removed from the gaze used for the cubes and dot. The panel shows the mean error before and after the correction. The offset is saved to `user://eye_calibration.json` and reloaded next time; the per-target error, bias and jitter go to `user://eye_tracking_accuracy.json`. Each calibration overwrites both files, and **Clear calibration** deletes them.
-
-Passthrough is the runtime's `ALPHA_BLEND` blend mode. With it on, levels clear to alpha 0 (`transparent_bg`) and hide their floor.
-
-Eye tracking uses `XR_EXT_eye_gaze_interaction` (project setting `xr/openxr/extensions/eye_gaze_interaction`) and an `eye_pose` action that `tools/add_eye_gaze_action.gd` added to `openxr_action_map.tres`. `tools/add_face_button_action.gd` added the `face_button` action (Frame: right A/B/X/Y and left d-pad; Touch: A/B/X/Y).
-
-SteamVR/OpenXR 2.18.2 on the Frame (checked 16 October 2026 with `--verbose`) offers eye gaze, hand tracking, foveation and the `OPAQUE`/`ALPHA_BLEND` blend modes, but no spatial-entity extensions. That means no anchors, plane tracking or marker tracking, so those levels were removed.
-
-**Debug: panel position.** With project setting `frame_lab/debug/panel_position_save=true` (currently off), the options panel has a **Save position** button at the top right. It stores the panel's pose relative to the launch direction for the current level (`hub`, `eye_tracking_cubes`, `cube_lab`) in `user://panel_positions.json` and prints it as `[Panel] saved ...`. While the setting is on, a saved pose replaces the level's default. `yaw_deg` is positive to the right; `distance_m` is horizontal; `drop_m` is below eye height. On the Frame the file is `~/.local/share/godot/app_userdata/Azad's Steam Frame Experiments/panel_positions.json`.
-
-Headless check (no headset): `Godot --headless --xr-mode off --path . --script res://tests/smoke_levels.gd`. It loads the hub and experiment levels for a few frames and unit-tests the gaze math. It cannot exercise the XR extensions.
-
-## Release download
-
-`python tools/package_release.py v0.1.0` (after `tools/build.ps1`) writes `build/azads-steam-frame-experiments-v0.1.0-linux-arm64.tar.gz` for a GitHub release. It contains the Linux ARM64 executable `frame-lab.arm64`, its data `frame-lab.pck`, `launch.sh` (sets `XR_RUNTIME_JSON` to SteamVR's ARM64 runtime and the log path), `vrpreferences.json` and `INSTALL.txt`. On the Frame: download it in Desktop Mode, extract, then in Steam use **Add a Non-Steam Game** and pick `launch.sh`. The archive was checked on the Frame on 19 October 2026: it extracts with executable permissions and the extracted build passes the self-test. Launching it through **Add a Non-Steam Game** has not been tried yet; the devkit deployment below registers the same files with the `SteamLinuxRuntime_4-arm64` compatibility tool.
-
-## Build and deploy
-
-From this project directory:
-
-```powershell
-.\tools\build.ps1
-python tools\deploy.py --launch
-```
-
-Build imports the project, runs interaction regression tests, and exports `build/frame-lab.arm64` plus `build/frame-lab.pck`. Quit the previous headset instance before deploying. Deployment prompts for the SSH password, or reads `FRAME_SSH_PASSWORD` from the process environment; no password is stored in the project. It reuses the workspace's existing Paramiko installation and trusted SSH host entry for `steamos@frame`.
-
-The installer verifies uploaded hashes, installs under `~/devkit-game/Frame_Lab`, registers the existing Steam devkit helper with the installed `SteamLinuxRuntime_4-arm64`, and launches through Steam. `vrpreferences.json` suggests a 90 Hz per-app minimum refresh rate. SteamVR reads it at startup; if an app-specific override is already set, reset that app's video settings to defaults or choose 90 Hz there. Runtime log: `~/.local/state/frame-lab/godot.log`.
-
-To reinstall the pinned editor/templates, run `python tools/setup_godot.py`. Downloads are verified against the official SHA-512 sums. Linux ARM64 and Windows x64 templates are installed; the configured and device-tested export is Linux ARM64. PC VR deployment has not been tested.
-
-## Verification — 4 October 2026
-
-- Godot 4.7.2 import and ARM64 export passed.
-- Behavior tests passed on Windows and the exported ARM64 executable: ownership, throw velocities, floating placement, touch debounce, focus safety, reset, and trigger-only grab/release through `XRController3D`.
-- The first version bound only side grip. A trigger-only regression failed before the fix and passed after adding trigger support; SteamVR's generated bindings confirmed both controllers received the new mappings.
-- Live runtime: SteamOS 0.4.3, SteamVR/OpenXR 2.18.2, Mobile Vulkan renderer, Adreno 750. Session initialization and rendering verified. Runtime reported 72 FPS while unfocused; this is not a full performance benchmark. The runtime warns that disabled window V-Sync falls back to enabled.
-- User confirmed the touch switch, positional sounds, grabbing, and throwing work in the headset.
-- Local evidence: `../outputs/godot-frame-lab/`. The first headset capture shows the dashboard, not proof of the scene; final physical acceptance is the user's confirmation.
-
-Tracked in [AZA-224](https://linear.app/azadbalabanian/issue/AZA-224/set-up-godot-openxr-sandbox-on-steam-frame).
-
-References: [Valve's Godot guide](https://partner.steamgames.com/doc/steamhardware/steamframe/engines/godot), [Godot XR setup](https://docs.godotengine.org/en/stable/tutorials/xr/setting_up_xr.html). No third-party game assets or XR plugins are required.
+References: [Valve's Steam Frame Godot guide](https://partner.steamgames.com/doc/steamhardware/steamframe/engines/godot), [Godot XR docs](https://docs.godotengine.org/en/stable/tutorials/xr/setting_up_xr.html). No third-party assets or XR plugins are used.

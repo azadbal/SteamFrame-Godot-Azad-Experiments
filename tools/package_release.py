@@ -16,18 +16,25 @@ PROJECT = Path(__file__).resolve().parents[1]
 FOLDER = "azads-steam-frame-experiments"
 INSTALL = """Azad's Steam Frame Experiments {version}
 
+Install on the Steam Frame
+  1. In Desktop Mode, download {archive} from the GitHub release.
+  2. Extract it (Dolphin: right-click > Extract > Extract here).
+  3. Double-click install.py in the extracted folder and choose Execute.
+     A message confirms the install.
+  4. In the headset, open the Steam library > Non-Steam and launch
+     "Azads_Steam_Frame_Experiments".
+  You can delete the downloaded folder afterwards; the app is copied to ~/devkit-game.
+  If the installer says Steam did not answer, turn on Developer Mode in Steam settings.
+
+Update: install a newer release the same way; it replaces the old one.
+Uninstall: run "python3 install.py --uninstall" from a terminal in the extracted folder.
+
 Contents
+  install.py          installer (copies the app and registers it with Steam)
   frame-lab.arm64     Godot 4.7.2 Linux ARM64 executable
   frame-lab.pck       game data (must stay next to the executable)
-  launch.sh           starts the executable with SteamVR's OpenXR runtime; add this to Steam
+  launch.sh           starts the executable with SteamVR's OpenXR runtime
   vrpreferences.json  asks SteamVR for at least 90 Hz
-
-Install on the Steam Frame
-  1. Switch to Desktop Mode and download {archive} from the GitHub release.
-  2. Extract it, for example into ~/Applications (Dolphin: right-click > Extract > Extract here).
-  3. In Steam: Games > Add a Non-Steam Game to My Library > Browse, set the file filter to
-     All Files, select launch.sh in the extracted folder, then Add Selected Programs.
-  4. Return to the headset view and launch it from the library (Non-Steam).
 
 Logs go to ~/.local/state/frame-lab/godot.log.
 """
@@ -59,6 +66,7 @@ def main():
         "frame-lab.arm64": (build / "frame-lab.arm64", 0o755),
         "frame-lab.pck": (build / "frame-lab.pck", 0o644),
         "launch.sh": (PROJECT / "tools" / "launch.sh", 0o755),
+        "install.py": (PROJECT / "tools" / "install.py", 0o755),
         "vrpreferences.json": (PROJECT / "vrpreferences.json", 0o644),
     }
     for name, (source, _) in sources.items():
@@ -67,7 +75,7 @@ def main():
     target = build / archive_name
     with tarfile.open(target, "w:gz") as archive:
         for name, (source, mode) in sources.items():
-            if name == "launch.sh":
+            if name in ("launch.sh", "install.py"):
                 # Unix line endings, whatever the Windows checkout uses.
                 add_text(archive, name, source.read_text(encoding="utf-8").replace("\r\n", "\n"), mode)
             else:
