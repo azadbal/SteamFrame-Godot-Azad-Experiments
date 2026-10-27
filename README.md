@@ -2,6 +2,9 @@
 
 Small VR experiments for the Valve Steam Frame, made with Godot 4.7.2 and running natively on the headset (Linux ARM64, OpenXR). There are two levels: **Eye tracking cubes**, where you select with your gaze and run a calibration, and **Cube lab**, with throwable cubes, spatial-audio spheres and a light switch.
 
+<img width="2088" height="1557" alt="Screenshot 2026-10-27 085757" src="https://github.com/user-attachments/assets/4260395d-8add-4aed-9f81-2fb7c1733061" />
+
+
 ## Try it
 
 1. On the Steam Frame, switch to **Desktop Mode** and download the latest `azads-steam-frame-experiments-…-linux-arm64.tar.gz` from [Releases](https://github.com/azadbal/SteamFrame-Godot-Azad-Experiments/releases).
